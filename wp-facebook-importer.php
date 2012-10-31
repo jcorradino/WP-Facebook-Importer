@@ -44,7 +44,6 @@ if (get_option("facebook_api_token") == "" && FACEBOOK_APP_ID != "" && FACEBOOK_
 
 // Include child files
 $files = scandir('includes');
-includeFiles($files);
 foreach ($files as $include) {
 	if ($include != '.' && $include != '..') { // ignores self and parent directory
 		if (is_dir($include)) { // if a directory, re-run function to get directory contents
