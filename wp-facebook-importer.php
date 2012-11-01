@@ -26,33 +26,44 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 // Set your own app here to generate an app token, or just use mine.
 // Can be found on your apps page at https://developers.facebook.com/apps
-define("FACEBOOK_APP_ID", "");
-define("FACEBOOK_APP_SECRET", "");
+$fb_app_id = "";
+$fb_app_secret = "";
+$fb_app_redirect_url = ""; // doesn't actually redirect, just needs to be set in the call and within your app
 
 // Set your own API token here if you would like to override the one I use (if you don't want to use your ID and Secret above)
 
-if (get_option("facebook_api_token") == "" && FACEBOOK_APP_ID != "" && FACEBOOK_APP_SECRET != "") {
+$fb_current_token = get_option("facebook_api_token");
+
+if ($fb_current_token == "" && $fb_app_id != "" && $fb_app_secret != "" && $fb_app_redirect_url != "") {
 	$ch = curl_init(); 
-	curl_setopt($ch, CURLOPT_URL, 'https://graph.facebook.com/oauth/access_token?client_id='.FACEBOOK_APP_ID.'&client_secret='.FACEBOOK_APP_SECRET.'&redirect_uri=imyourdeveloper.com&grant_type=client_credentials');
+	curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/oauth/access_token?client_id=$fb_app_id&client_secret=$fb_app_secret&redirect_uri=$fb_app_redirect_url&grant_type=client_credentials");
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE); 
 	$token = str_replace("access_token=", "", curl_exec($ch));
 	define("FACEBOOK_APP_TOKEN", $token);
 	add_option("facebook_api_token", $token);
 } else {
-	define("FACEBOOK_APP_TOKEN", "413167725414537|SYI8M2Q788ar_fwjaHU2thqeTLQ");
+	if ($fb_current_token != "") {
+		define("FACEBOOK_APP_TOKEN", $fb_current_token);
+	} else {
+		define("FACEBOOK_APP_TOKEN", "413167725414537|SYI8M2Q788ar_fwjaHU2thqeTLQ");
+	}
 }
 
 // Include child files
-$files = scandir('includes');
-foreach ($files as $include) {
-	if ($include != '.' && $include != '..') { // ignores self and parent directory
-		if (is_dir($include)) { // if a directory, re-run function to get directory contents
-			$files = scandir($include);
-			$newPath = $currentPath . $include . '/';
-			includeFiles($files, $newPath);
-		} else {
-			if (strstr($include, '.php') && !strstr($include, '.beta.')) { // only grab .php files
-				include($currentPath.$include);
+$fb_importer_dir = WP_PLUGIN_DIR.'/WP-Facebook-Importer/includes/';
+$files = scandir($fb_importer_dir);
+includeFiles($files, $fb_importer_dir);
+function includeFiles ($files, $currentPath='') {
+	foreach ($files as $include) {
+		if ($include != '.' && $include != '..') { // ignores self and parent directory
+			if (is_dir($include)) { // if a directory, re-run function to get directory contents
+				$files = scandir($include);
+				$newPath = $currentPath . $include . '/';
+				includeFiles($files, $newPath);
+			} else {
+				if (strstr($include, '.php') && !strstr($include, '.beta.')) { // only grab .php files
+					include($currentPath.$include);
+				}
 			}
 		}
 	}
@@ -61,4 +72,4 @@ foreach ($files as $include) {
 if (is_admin()) {
 	facebookImporterAdmin::init();
 }
-facebookImporter::init();
+facebookImporterMain::init();
