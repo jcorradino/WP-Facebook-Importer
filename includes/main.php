@@ -65,7 +65,8 @@ class facebookImporterMain {
 		register_post_type( 'facebook_images',
 			array(
 				'labels' => array(
-					'name' => __( 'Facebook Images' ),
+					'name' => __( 'Facebook Sync' ),
+					'all_items' => __( 'Facebook Images' ),
 					'singular_name' => __( 'Facebook Image' ),
 					'add_new' => __( '' ),
 					'edit_item' => __( 'Edit Facebook Image Data' ),
