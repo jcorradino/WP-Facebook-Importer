@@ -26,9 +26,69 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 class fql {
 	
+	var $id;
+	
+	/**
+	 * Processes arguments to generate the FQL where parameters based on the comparison and method variables
+	 *
+	 * @param $args [array|string] - Arguments to process
+	 * @param $comparison [string] - Like (%) or equals (=) comparison
+	 * @param $method [string] - The method to use, "and" or "or"
+	 *
+	 * @return returning string containing "where" comparisons
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
+	function process_args($args, $comparison, $method) {
+		if (sizeof($args) > 0) {
+			foreach($args as $arg) {
+				if (strtoupper($arg[2]) == $method) {
+					if ($where != "") {
+						$where .= $method." ";
+					}
+					if ($method == "OR") {
+						$where .= "source_id = {$this->id} AND ";
+					}
+					if ($comparison == "=") {
+						$where .= "{$arg[0]} = '{$arg[1]}' ";
+					} else if ($comparison == "%") {
+						$where .= "strpos({$arg[0]}, '{$arg[1]}') ";
+					}
+				}
+			}
+		} else if (!empty($args)) {
+			if ($args[2] == $method) {
+				if ($where != "") {
+					$where .= $method;
+				}
+				if ($method == "OR") {
+					$where .= "source_id = {$this->id} AND ";
+				}
+				if ($comparison == "=") {
+					$where .= "{$args[0]} = '{$args[1]}' ";
+				} else if ($comparison == "%") {
+					$where .= "strpos({$args[0]}, '{$args[1]}') ";
+				}
+			}
+		}
+		return $where;
+	}
+	
+	/**
+	 * Build the FQL query based on the data passed
+	 *
+	 * @param $source [string] - The Facebook API table to query
+	 * @param $args [object] - Arguments: columns (what to select), equals (search using "="), and like (search using something similar to SQL's LIKE "%foo%")
+	 *
+	 * @return FQL query
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function build_query($source = "", $args = "") {
-		$id = get_option("facebook_user_id");
-		$id = 12345;
+		$this->id = get_option("facebook_user_id");
+		$this->id = 103817796377295;
 		
 		if (!$args->columns) {
 			$args->columns = "post_id, message, action_links, attachment, impressions, comments, likes, permalink, tagged_ids, description, type";
@@ -42,59 +102,27 @@ class fql {
 			return false;
 		}
 		
-		if (sizeof($args->equals) > 0) {
-			foreach ($args->equals as $equals) {
-				if ($where != "") {
-					$where .= (strtoupper($equals[2]) == "OR") ? "OR " : "AND ";
-				}
-				
-				if (strtoupper($equals[2]) == "OR") {
-					$where .= "source_id = $id AND ";
-				}
-				
-				$where .= "{$equals[0]} = '{$equals[1]}' ";
-			}
-		} else if (!empty($args->equals)) {
-			if ($where != "") {
-				$where .= (strtoupper($args->equals[2]) == "OR") ? "OR " : "AND ";
-			}
-			
-			if (strtoupper($args->equals[2]) == "OR") {
-				$where .= "source_id = $id AND ";
-			}
-			
-			$where .= "{$args->equals[0]} = '{$args->equals[1]}' ";
-		}
+		$orWhere = $this->process_args($args->equals, "=", "OR");
+		$orWhere = ($orWhere != "") ? $orWhere . $this->process_args($args->like, "%", "OR") : $this->process_args($args->like, "%", "OR");
 		
-		if (sizeof($args->like) > 0) {
-			foreach ($args->like as $like) {
-				if ($where != "") {
-					$where .= (strtoupper($equals[2]) == "OR") ? "OR " : "AND ";
-				}
-				
-				if (strtoupper($equals[2]) == "OR") {
-					$where .= "source_id = $id AND ";
-				}
-				
-				$where .= "strpos({$like[0]}, '{$like[1]}') ";
-			}
-		} else if (!empty($args->like)) {
-			if ($where != "") {
-				$where .= (strtoupper($equals[2]) == "OR") ? "OR " : "AND ";
-			}
-			
-			if (strtoupper($equals[2]) == "OR") {
-				$where .= "source_id = $id AND ";
-			}
-			
-			$where .= "strpos({$args->like[0]}, '{$args->like[1]}') ";
-		}
+		$andWhere = $this->process_args($args->equals, "=", "AND");
+		$andWhere = ($andWhere != "") ? $andWhere . $this->process_args($args->like, "%", "AND") : $this->process_args($args->like, "%", "AND");
+		
+		$where = "" . (($orWhere != "" || $andWhere != "") ? "" : "1=1 ") . $andWhere . (($orWhere != "") ? "OR " . $orWhere : "");
 
-		$query = "SELECT {$args->columns} FROM $source WHERE source_id = $id AND $where";
+		$query = "SELECT {$args->columns} FROM $source WHERE source_id = {$this->id} AND $where";
 			
 		return $query;
 	}
 	
+	/**
+	 * Lookup user ID based on username
+	 *
+	 * @param $user [string] - username to lookup
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function lookup_user_id($user) {
 		if (is_int($user)) {
 		
@@ -107,10 +135,26 @@ class fql {
 		}
 	}
 	
+	/**
+	 * Lookup galleries on page
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function galleries() {
 		echo true;
 	}
 	
+	/**
+	 * Connect to Facebook Graph API and return JSON
+	 *
+	 * @param $query [string] - query to run
+	 *
+	 * @return JSON of data retrieved from Facebook
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function run_query($query) {
 		$query = urlencode($query);
 		$url = "https://graph.facebook.com/fql?q=$query&access_token=".FACEBOOK_APP_TOKEN;
@@ -125,21 +169,5 @@ class fql {
 	}
 	
 }
-$args->columns = array("test1", "test2");
-$args->equals = array(
-	array(
-		"testColumn1", "value1"
-	),
-	array(
-		"testColumn2", "value2"
-	),
-	array(
-		"testColumn3", "value3", "or"
-	)
-);
-$fql = new fql();
-echo $fql->build_query("testTable", $args);
-exit();
-
 
 //fql::lookup_user_id("playtimeanytime");
