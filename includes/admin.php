@@ -61,9 +61,7 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function plugin_init() {
-		register_setting( 'facebook_gallery_options', 'facebook_profile_address_field');
-		register_setting( 'facebook_gallery_options', 'facebook_wall_field');
-		register_setting( 'facebook_gallery_options', 'facebook_gallery_selections_field');
+		register_setting( 'facebook_gallery_options', 'facebook_gallery_options', array(__CLASS__, "validate_fields"));
 		add_settings_section('facebook_profile_address', 'Profile Setup', array(__CLASS__, "wall_profile_address_text"), 'facebook_sync');
 		add_settings_field('facebook_profile_address_field', 'Facebook ID/Profile Name', array(__CLASS__, "wall_profile_address_textbox"), 'facebook_sync', 'facebook_profile_address');
 		add_settings_section('facebook_wall_filter', 'Facebook Wall Filter', array(__CLASS__, "wall_filter_text"), 'facebook_sync');
@@ -73,12 +71,14 @@ class facebookImporterAdmin {
 			
 	}
 	
-	function validate_options() {
-		echo true;
+	function validate_fields() {
+		print_r($_POST);
 		exit();
+		//return array(
+		//	"facebook_id" => ,
+		//	"facebook_name" => 
+		//);
 	}
-	
-	
 	
 	/**
 	 * Creates the "Wall Content" view page
@@ -133,7 +133,7 @@ class facebookImporterAdmin {
 				<form action="options.php" method="post">
 					<p>Use this page to configure sync data from facebook, set update timeframes, wall content filters, select galleries to use, and manually update all data.</p>
 					<p><input name="Submit" type="submit" value="<?php esc_attr_e('Save Changes'); ?>" /></p>
-					<?php settings_fields('facebook_sync_options'); ?>
+					<?php settings_fields('facebook_gallery_options'); ?>
 					<?php do_settings_sections('facebook_sync'); ?>
 					<p><input name="Submit" type="submit" value="<?php esc_attr_e('Save Changes'); ?>" /></p>
 				</form>
@@ -208,6 +208,6 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function wall_profile_address_textbox() {
-		echo '<input type="text" name="facebook_gallery_selections_field" id="profileIDBox" value="'.$options['facebook_gallery_selections_field'].'" />';
+		echo '<input type="text" name="facebook_profile_field" id="profileIDBox" value="'.$options['facebook_gallery_selections_field'].'" />';
 	}
 }
