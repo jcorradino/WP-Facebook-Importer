@@ -156,7 +156,6 @@ class fql {
 			
 			$userIdJson = $self->run_query($query);
 			print_r($userIdJson);
-			exit();
 		}
 	}
 	
@@ -168,6 +167,10 @@ class fql {
 	 */
 	function galleries() {
 		$this->id = get_option("facebook_user_id");
+		if ($this->id == "") {
+			echo "<h3>Please enter a facebook page id to select a gallery</h3>";
+			return true;
+		}
 		$galleries = array();
 		$source = "album";
 		$args = array(

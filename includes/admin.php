@@ -33,6 +33,8 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function init() {
+		global $fql;
+		$fql = new fql();
 		//add_action('admin_enqueue_scripts', array(__CLASS__, "enqueueScript"));
 		add_action('admin_head', array(__CLASS__, "admin_header"));
 		add_action('admin_menu', array(__CLASS__, "setup_pages"));
@@ -59,19 +61,21 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function plugin_init() {
-		register_setting( 'facebook_gallery_options', 'facebook_gallery_options', array(__CLASS__, "validate_options"));
+		register_setting( 'facebook_gallery_options', 'facebook_profile_address_field');
+		register_setting( 'facebook_gallery_options', 'facebook_wall_field');
+		register_setting( 'facebook_gallery_options', 'facebook_gallery_selections_field');
 		add_settings_section('facebook_profile_address', 'Profile Setup', array(__CLASS__, "wall_profile_address_text"), 'facebook_sync');
 		add_settings_field('facebook_profile_address_field', 'Facebook ID/Profile Name', array(__CLASS__, "wall_profile_address_textbox"), 'facebook_sync', 'facebook_profile_address');
 		add_settings_section('facebook_wall_filter', 'Facebook Wall Filter', array(__CLASS__, "wall_filter_text"), 'facebook_sync');
 		add_settings_field('facebook_wall_field', 'Filter content by', array(__CLASS__, "wall_filter_textbox"), 'facebook_sync', 'facebook_wall_filter');
 		add_settings_section('facebook_gallery_selections', 'Facebook Galleries', array(__CLASS__, "gallery_selection_text"), 'facebook_sync');
 		add_settings_field('facebook_gallery_selections_field', 'Select Galleries', array(__CLASS__, "gallery_selection_selector"), 'facebook_sync', 'facebook_gallery_selections');
-		
-		
+			
 	}
 	
 	function validate_options() {
-		
+		echo true;
+		exit();
 	}
 	
 	
@@ -157,9 +161,10 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function gallery_selection_selector() {
+		global $fql;
 		$options = get_option('facebook_gallery_options');
 		echo '<ul>';
-		fql::galleries();
+		$fql->galleries();
 		echo '</ul>';
 		echo '<input type="text" name="facebook_gallery_selections_field" id="gallerySelectorBox" value="'.$options['facebook_gallery_selections_field'].'" />';
 	}
