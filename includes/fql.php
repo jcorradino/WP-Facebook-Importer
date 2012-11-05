@@ -31,70 +31,45 @@ class fql {
 	/**
 	 * Processes arguments to generate the FQL where parameters based on the comparison and method variables
 	 *
+	 * Example of $args:
+	 *
+	 * $args = array(
+	 *		'comparisons' => array(
+	 *			array(
+	 *				"and",
+	 *				array("group1a", "group1a", "equals"),
+	 *				array("group1b", "group1b", "like")
+	 *			),
+	 *			array(
+	 *				"or",
+	 *				array("group2a", "group2a", "equals"),
+	 *				array("group2b", "group2b", "equals")
+	 *			),
+	 *			array("nogroup", "nogroup", "equals", "and")
+	 *		),
+	 *		'columns' => array(
+	 *			"message",
+	 *			"post_id"
+	 *		)
+	 *	);
+	 *
+	 * @param $source [string] - table being used
 	 * @param $args [array|string] - Arguments to process
-	 * @param $comparison [string] - Like (%) or equals (=) comparison
-	 * @param $method [string] - The method to use, "and" or "or"
 	 *
-	 * @return returning string containing "where" comparisons
+	 * @return [string] FQL query
 	 *
 	 * @author Jason Corradino
 	 *
 	 */
-	function process_args($args, $comparison, $method) {
-		if (sizeof($args) > 0) {
-			foreach($args as $arg) {
-				if (strtoupper($arg[2]) == $method) {
-					if ($where != "") {
-						$where .= $method." ";
-					}
-					if ($method == "OR") {
-						$where .= "source_id = {$this->id} AND ";
-					}
-					if ($comparison == "=") {
-						$where .= "{$arg[0]} = '{$arg[1]}' ";
-					} else if ($comparison == "%") {
-						$where .= "strpos({$arg[0]}, '{$arg[1]}') ";
-					}
-				}
-			}
-		} else if (!empty($args)) {
-			if ($args[2] == $method) {
-				if ($where != "") {
-					$where .= $method;
-				}
-				if ($method == "OR") {
-					$where .= "source_id = {$this->id} AND ";
-				}
-				if ($comparison == "=") {
-					$where .= "{$args[0]} = '{$args[1]}' ";
-				} else if ($comparison == "%") {
-					$where .= "strpos({$args[0]}, '{$args[1]}') ";
-				}
-			}
-		}
-		return $where;
-	}
-	
-	/**
-	 * Build the FQL query based on the data passed
-	 *
-	 * @param $source [string] - The Facebook API table to query
-	 * @param $args [object] - Arguments: columns (what to select), equals (search using "="), and like (search using something similar to SQL's LIKE "%foo%")
-	 *
-	 * @return FQL query
-	 *
-	 * @author Jason Corradino
-	 *
-	 */
-	function build_query($source = "", $args = "") {
+	function generate_query($source = "", $args = "") {
 		$this->id = get_option("facebook_user_id");
 		$this->id = 103817796377295;
 		
-		if (!$args->columns) {
-			$args->columns = "post_id, message, action_links, attachment, impressions, comments, likes, permalink, tagged_ids, description, type";
-		} else if (sizeof($args->columns) > 0) {
-			$args->columns = implode(", ", $args->columns);
-		} else if (!is_string($args->columns)) {
+		if (!$args['columns']) {
+			$args['columns'] = "post_id, message, action_links, attachment, impressions, comments, likes, permalink, tagged_ids, description, type";
+		} else if (sizeof($args['columns']) > 0) {
+			$args['columns'] = implode(", ", $args['columns']);
+		} else if (!is_string($args['columns'])) {
 			return false;
 		}
 		
@@ -102,17 +77,67 @@ class fql {
 			return false;
 		}
 		
-		$orWhere = $this->process_args($args->equals, "=", "OR");
-		$orWhere = ($orWhere != "") ? $orWhere . $this->process_args($args->like, "%", "OR") : $this->process_args($args->like, "%", "OR");
+		if ($source == "page") {
+			$where = "source_id = {$this->id} ";
+		} else {
+			$where = "1=1 ";
+		}
 		
-		$andWhere = $this->process_args($args->equals, "=", "AND");
-		$andWhere = ($andWhere != "") ? $andWhere . $this->process_args($args->like, "%", "AND") : $this->process_args($args->like, "%", "AND");
+		$where .= $this->process_args($source, $args);
 		
-		$where = "" . (($orWhere != "" || $andWhere != "") ? "" : "1=1 ") . $andWhere . (($orWhere != "") ? "OR " . $orWhere : "");
-
-		$query = "SELECT {$args->columns} FROM $source WHERE source_id = {$this->id} AND $where";
-			
-		return $query;
+		return "SELECT {$args['columns']} FROM $source WHERE $where";
+	}
+	
+	/**
+	 * Cycle through arguments, process argument groups and single arguments, generate while clauses
+	 *
+	 * @param $args [array] - all comparisons to be run in the query,
+	 *
+	 * @return [string] processed args, while clauses for this query
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
+	function process_args($source, $args) { // group query
+		
+		foreach($args["comparisons"] as $comparison) {
+			if (strtolower($comparison[0]) == "or" && $source == "page") {
+				$orQuery .= "OR source_id = {$this->id} ";
+			}
+			for($i = 0; $i < sizeof($comparison); $i++) {
+				if (is_array($comparison[$i])) {
+					if (strtolower($comparison[0]) == "or") {
+						$orQuery .= "AND " . $this->process_subargs($comparison[$i]);
+					} else {
+						$andQuery .= "AND " . $this->process_subargs($comparison[$i]);
+					}
+				}
+			}
+			if (strtolower($comparison[3]) == "or") {
+				$orQuery .= "OR source_id = {$this->id} AND " . $this->process_subargs($comparison);
+			} else if (strtolower($comparison[3]) == "and") {
+				$andQuery .= "AND " . $this->process_subargs($comparison);
+			}
+		}
+		return $andQuery . $orQuery;
+	}
+	
+	/**
+	 * Cycle through sub-arguments to generate the individual while clauses of the query
+	 *
+	 * @param $args [array] - An individual comparison in the query,
+	 *
+	 * @return [string] Individual parts of the query
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
+	function process_subargs($args) {
+		if ($args[2] == "equals") {
+			return "{$args[0]} = '{$args[1]}' ";
+		} else if ($args[2] == "like") {
+			return "strpos({$args[0]}, '{$args[1]}') ";
+		}
 	}
 	
 	/**
@@ -142,7 +167,32 @@ class fql {
 	 *
 	 */
 	function galleries() {
-		echo true;
+		$this->id = get_option("facebook_user_id");
+		$galleries = array();
+		$source = "album";
+		$args = array(
+			"columns" => array("aid", "name", "cover_pid", "name", "created", "description", "location", "size"),
+			"comparisons" => array( array("owner", $this->id, "equals", "and") )
+		);
+		$query = $this->generate_query($source, $args);
+		$data = $this->run_query($query);
+		foreach ($data->data as $gallery) {
+			$args = array(
+				"columns" => array("src_small"),
+				"comparisons" => array( array("pid", $gallery->cover_pid, "equals", "and") )
+			);
+			$query = $this->generate_query("photo", $args);
+			$photo_data = $this->run_query($query);
+			$gallery_info = array(
+				"aid" => $gallery->aid,
+				"name" => $gallery->name,
+				"created" => $gallery->created,
+				"description" => $gallery->description,
+				"image" => $photo_data->data[0]->src_small
+			);
+			array_push($galleries, $gallery_info);
+		}
+		return $galleries;
 	}
 	
 	/**
@@ -169,5 +219,3 @@ class fql {
 	}
 	
 }
-
-//fql::lookup_user_id("playtimeanytime");
