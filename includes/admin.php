@@ -72,12 +72,19 @@ class facebookImporterAdmin {
 	}
 	
 	function validate_fields() {
-		print_r($_POST);
-		exit();
-		//return array(
-		//	"facebook_id" => ,
-		//	"facebook_name" => 
-		//);
+		global $fql;
+		
+		$options = get_option('facebook_gallery_options');
+		if ($_POST['facebook_profile_field'] != "" && $options['facebook_id'] != $_POST['facebook_profile_field']) {
+			$id = $fql->lookup_user_id($_POST['facebook_profile_field']);
+		}
+		
+		return array(
+			"facebook_id" => $id,
+			"facebook_name" => $_POST['facebook_profile_field'],
+			"facebook_wall_field" => $_POST['facebook_wall_field'],
+			"facebook_gallery_selections_field" => $_POST['facebook_gallery_selections_field']
+		);
 	}
 	
 	/**
@@ -164,7 +171,29 @@ class facebookImporterAdmin {
 		global $fql;
 		$options = get_option('facebook_gallery_options');
 		echo '<ul>';
-		$fql->galleries();
+		foreach ($fql->galleries() as $gallery) {
+			if ($gallery['image'] == "")
+				continue;
+				
+			echo '
+				<style>
+					.gallerySelector {width:100%; float: left; border-bottom: 1px solid #cccccc; margin: 15px 0;}
+					.checkboxSelector {width: 3%; float: left;}
+					.gallerySelectorItem {width: 96%; float: right;}
+					.gallerySelectorItem img {padding: 0 10px 10px 0;}
+				</style>
+				<li class="gallerySelector">
+					<div class="checkboxSelector">
+						<input type="checkbox" name="selectedGalleries" value="'.$gallery['aid'].'">
+					</div>
+					<div class="gallerySelectorItem">
+						<img style="float:left" src="'.$gallery['image'].'" />
+						<h4>'.$gallery['name'].'</h4>
+						<p>'.$gallery['description'].'</p>
+					</div>
+				</li>
+			';
+		}
 		echo '</ul>';
 		echo '<input type="text" name="facebook_gallery_selections_field" id="gallerySelectorBox" value="'.$options['facebook_gallery_selections_field'].'" />';
 	}
@@ -187,6 +216,7 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function wall_filter_textbox() {
+		$options = get_option('facebook_gallery_options');
 		echo '<input type="text" name="facebook_wall_field" id="wallFilterBox" value="'.$options['facebook_wall_field'].'" />';
 	}
 	
@@ -208,6 +238,7 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function wall_profile_address_textbox() {
-		echo '<input type="text" name="facebook_profile_field" id="profileIDBox" value="'.$options['facebook_gallery_selections_field'].'" />';
+		$options = get_option('facebook_gallery_options');
+		echo '<input type="text" name="facebook_profile_field" id="profileIDBox" value="'.$options['facebook_name'].'" />';
 	}
 }

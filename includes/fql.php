@@ -150,12 +150,12 @@ class fql {
 	 */
 	function lookup_user_id($user) {
 		if (is_int($user)) {
-		
+			return $user;
 		} else {
 			$query = "SELECT page_id FROM page WHERE username = '$user'";
 			
-			$userIdJson = $self->run_query($query);
-			print_r($userIdJson);
+			$userIdJson = $this->run_query($query);
+			return $userIdJson->data[0]->page_id;
 		}
 	}
 	
@@ -166,36 +166,42 @@ class fql {
 	 *
 	 */
 	function galleries() {
-		$this->id = get_option("facebook_user_id");
+		$options = get_option("facebook_gallery_options");
+		$galleryData = get_option("facebook_gallery_data");
+		$this->id = $options['facebook_id'];
 		if ($this->id == "") {
 			echo "<h3>Please enter a facebook page id to select a gallery</h3>";
 			return true;
-		}
-		$galleries = array();
-		$source = "album";
-		$args = array(
-			"columns" => array("aid", "name", "cover_pid", "name", "created", "description", "location", "size"),
-			"comparisons" => array( array("owner", $this->id, "equals", "and") )
-		);
-		$query = $this->generate_query($source, $args);
-		$data = $this->run_query($query);
-		foreach ($data->data as $gallery) {
+		} else if ($galleryData != "" || $_GET["refresh"] == true) {
+			return $galleryData;
+		} else {
+			$galleries = array();
+			$source = "album";
 			$args = array(
-				"columns" => array("src_small"),
-				"comparisons" => array( array("pid", $gallery->cover_pid, "equals", "and") )
+				"columns" => array("aid", "name", "cover_pid", "name", "created", "description", "location", "size"),
+				"comparisons" => array( array("owner", $this->id, "equals", "and") )
 			);
-			$query = $this->generate_query("photo", $args);
-			$photo_data = $this->run_query($query);
-			$gallery_info = array(
-				"aid" => $gallery->aid,
-				"name" => $gallery->name,
-				"created" => $gallery->created,
-				"description" => $gallery->description,
-				"image" => $photo_data->data[0]->src_small
-			);
-			array_push($galleries, $gallery_info);
+			$query = $this->generate_query($source, $args);
+			$data = $this->run_query($query);
+			foreach ($data->data as $gallery) {
+				$args = array(
+					"columns" => array("src_small"),
+					"comparisons" => array( array("pid", $gallery->cover_pid, "equals", "and") )
+				);
+				$query = $this->generate_query("photo", $args);
+				$photo_data = $this->run_query($query);
+				$gallery_info = array(
+					"aid" => $gallery->aid,
+					"name" => $gallery->name,
+					"created" => $gallery->created,
+					"description" => $gallery->description,
+					"image" => $photo_data->data[0]->src_small
+				);
+				array_push($galleries, $gallery_info);
+			}
+			update_option( "facebook_gallery_data", $galleries );
+			return $galleries;
 		}
-		return $galleries;
 	}
 	
 	/**
