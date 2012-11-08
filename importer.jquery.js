@@ -10,4 +10,19 @@ jQuery(document).ready(function($){
 			}
 		});
 	})
+	
+	if ($("#resyncLoaderStatus").attr("rel") == "resync-fb-galleries" && $("#resyncLoaderStatus").html() != "") {
+		setInterval("checkGalleryLoader()", 5000)
+	}
 });
+
+function checkGalleryLoader() {
+	console.log(true);
+	jQuery.ajax({
+		url: "/wp-admin/index.php?check=resync-fb-galleries",
+	}).done(function(data) {
+		if (data == "done") {
+			jQuery("#resyncLoaderStatus").html("Resync done, <a href='"+ window.location +"'>reload page</a> to see changes");
+		}
+	})
+}

@@ -200,6 +200,7 @@ class fql {
 				array_push($galleries, $gallery_info);
 			}
 			update_option( "facebook_gallery_data", $galleries );
+			delete_transient("resync-fb-galleries");
 			return $galleries;
 		}
 	}

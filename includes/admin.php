@@ -67,6 +67,7 @@ class facebookImporterAdmin {
 		
 		$nonce = $_REQUEST['_nonce'];
 		if (wp_verify_nonce($nonce, 'resync-fb-galleries') && $_GET['resync'] == "true") {
+			set_transient( 'resync-fb-galleries', 'true', 60*20 );
 			$response = "done";
 			ignore_user_abort(true);
 			header("Connection: close");
@@ -75,6 +76,11 @@ class facebookImporterAdmin {
 			$fql->galleries("true");
 			ignore_user_abort(false);
 			echo $response;
+		} else if ($_GET['check'] == "resync-fb-galleries") {
+			if (get_transient("resync-fb-galleries") != "true") {
+				echo "done";
+				exit();
+			}
 		}
 		
 		register_setting( 'facebook_gallery_options', 'facebook_gallery_options', array(__CLASS__, "validate_fields"));
@@ -187,8 +193,11 @@ class facebookImporterAdmin {
 	 */
 	function gallery_selection_text() {
 		$nonce= wp_create_nonce('resync-fb-galleries');
+		if (get_transient("resync-fb-galleries") == "true") {
+			$message = " <img src='/wp-content/plugins/WP-Facebook-Importer/loading.gif' width='11' /> Resyncing <small> - Page can be reloaded or closed and process will run in background</small>";
+		}
 		echo "Select galleries you would like to display on your site.";
-		echo '<p><a href="'.site_url().'/wp-admin/options-general.php?page=facebook_sync&resync=true&_nonce='.$nonce.'" class="button" id="ajaxButton">Click to force refresh gallery data</a> <span id="resyncLoaderStatus"></span></p>';
+		echo '<p><a href="'.site_url().'/wp-admin/options-general.php?page=facebook_sync&resync=true&_nonce='.$nonce.'" class="button" id="ajaxButton">Click to force refresh gallery data</a> <span id="resyncLoaderStatus" rel="resync-fb-galleries">'.$message.'</span></p>';
 		return true;
 	}
 	
