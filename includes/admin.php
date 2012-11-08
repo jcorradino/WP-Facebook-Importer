@@ -35,8 +35,10 @@ class facebookImporterAdmin {
 	function init() {
 		global $fql;
 		$fql = new fql();
+		
 		//add_action('admin_enqueue_scripts', array(__CLASS__, "enqueueScript"));
 		add_action('admin_head', array(__CLASS__, "admin_header"));
+		add_action('admin_enqueue_scripts', array(__CLASS__, "enqueue_admin_scripts"));
 		add_action('admin_menu', array(__CLASS__, "setup_pages"));
 		add_action('admin_init', array(__CLASS__, "plugin_init"));
 	}
@@ -61,6 +63,20 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function plugin_init() {
+		global $fql;
+		
+		$nonce = $_REQUEST['_nonce'];
+		if (wp_verify_nonce($nonce, 'resync-fb-galleries') && $_GET['resync'] == "true") {
+			$response = "done";
+			ignore_user_abort(true);
+			header("Connection: close");
+			header("Content-Length: " . mb_strlen($response));
+			flush();
+			$fql->galleries("true");
+			ignore_user_abort(false);
+			echo $response;
+		}
+		
 		register_setting( 'facebook_gallery_options', 'facebook_gallery_options', array(__CLASS__, "validate_fields"));
 		add_settings_section('facebook_profile_address', 'Profile Setup', array(__CLASS__, "wall_profile_address_text"), 'facebook_sync');
 		add_settings_field('facebook_profile_address_field', 'Facebook ID/Profile Name', array(__CLASS__, "wall_profile_address_textbox"), 'facebook_sync', 'facebook_profile_address');
@@ -68,9 +84,14 @@ class facebookImporterAdmin {
 		add_settings_field('facebook_wall_field', 'Filter content by', array(__CLASS__, "wall_filter_textbox"), 'facebook_sync', 'facebook_wall_filter');
 		add_settings_section('facebook_gallery_selections', 'Facebook Galleries', array(__CLASS__, "gallery_selection_text"), 'facebook_sync');
 		add_settings_field('facebook_gallery_selections_field', 'Select Galleries', array(__CLASS__, "gallery_selection_selector"), 'facebook_sync', 'facebook_gallery_selections');
-			
 	}
 	
+	/**
+	 * Validates and saves option information
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function validate_fields() {
 		global $fql;
 		
@@ -125,6 +146,16 @@ class facebookImporterAdmin {
 	}
 	
 	/**
+	 * Sets up scripts and styles in the header
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
+	function enqueue_admin_scripts() {
+		wp_enqueue_script( 'wp_facebook_importer_admin', WP_PLUGIN_URL.'/WP-Facebook-Importer/importer.jquery.js' );
+	}
+	
+	/**
 	 * Sets up options page
 	 *
 	 * @author Jason Corradino
@@ -155,9 +186,9 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function gallery_selection_text() {
-		$nonce= wp_create_nonce('resync-all-facebook');
+		$nonce= wp_create_nonce('resync-fb-galleries');
 		echo "Select galleries you would like to display on your site.";
-		echo '<p><a href="/options-general.php?page=facebook_sync&resync=true&_nonce='.$nonce.'" class="button" target="_blank">Click to force-resync all data</a></p>';
+		echo '<p><a href="'.site_url().'/wp-admin/options-general.php?page=facebook_sync&resync=true&_nonce='.$nonce.'" class="button" id="ajaxButton">Click to force refresh gallery data</a> <span id="resyncLoaderStatus"></span></p>';
 		return true;
 	}
 	

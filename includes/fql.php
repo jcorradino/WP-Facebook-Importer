@@ -165,14 +165,14 @@ class fql {
 	 * @author Jason Corradino
 	 *
 	 */
-	function galleries() {
+	function galleries($resync = "") {
 		$options = get_option("facebook_gallery_options");
 		$galleryData = get_option("facebook_gallery_data");
 		$this->id = $options['facebook_id'];
 		if ($this->id == "") {
 			echo "<h3>Please enter a facebook page id to select a gallery</h3>";
 			return true;
-		} else if ($galleryData != "" || $_GET["refresh"] == true) {
+		} else if ($galleryData != "" && $resync != "true") {
 			return $galleryData;
 		} else {
 			$galleries = array();
