@@ -79,11 +79,15 @@ class fql {
 		
 		if ($source == "page") {
 			$where = "source_id = {$this->id} ";
-		} else {
+		} else if (!in_array("noTrue", $args)) {
 			$where = "1=1 ";
 		}
 		
 		$where .= $this->process_args($source, $args);
+		
+		if (substr($where, 0, 3) == "OR ") {
+			$where = substr($where, 3);
+		}
 		
 		return "SELECT {$args['columns']} FROM $source WHERE $where";
 	}
@@ -113,8 +117,13 @@ class fql {
 					}
 				}
 			}
+			if ($source == "page") {
+				$preOr = "OR source_id = {$this->id} AND ";
+			} else {
+				$preOr = "OR ";
+			}
 			if (strtolower($comparison[3]) == "or") {
-				$orQuery .= "OR source_id = {$this->id} AND " . $this->process_subargs($comparison);
+				$orQuery .= $preOr . $this->process_subargs($comparison);
 			} else if (strtolower($comparison[3]) == "and") {
 				$andQuery .= "AND " . $this->process_subargs($comparison);
 			}
@@ -195,7 +204,8 @@ class fql {
 					"name" => $gallery->name,
 					"created" => $gallery->created,
 					"description" => $gallery->description,
-					"image" => $photo_data->data[0]->src_small
+					"image" => $photo_data->data[0]->src_small,
+					"size" => $gallery->size
 				);
 				array_push($galleries, $gallery_info);
 			}

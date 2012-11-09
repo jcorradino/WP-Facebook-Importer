@@ -12,7 +12,7 @@ jQuery(document).ready(function($){
 	})
 	
 	if ($("#resyncLoaderStatus").attr("rel") == "resync-fb-galleries" && $("#resyncLoaderStatus").html() != "") {
-		setInterval("checkGalleryLoader()", 5000)
+		setInterval("checkGalleryLoader()", 1500)
 	}
 });
 

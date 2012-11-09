@@ -75,7 +75,7 @@ class facebookImporterMain {
 					'search_items' => __( 'Search Facebook Image Data' ),
 					'not_found' => __( 'No Facebook images found' )
 				),
-				'supports' => array("title", "custom-fields"),
+				'supports' => array("title", "editor", "thumbnail", "custom-fields"),
 				'public' => true,
                 'publicly_queryable' => true,
                 'exclude_from_search' => true,

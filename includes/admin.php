@@ -99,6 +99,12 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function validate_fields() {
+		if ($this == "") {
+			$admin = new facebookImporterAdmin();
+		} else {
+			$admin = $this;
+		}
+		
 		global $fql;
 		
 		$options = get_option('facebook_gallery_options');
@@ -106,11 +112,16 @@ class facebookImporterAdmin {
 			$id = $fql->lookup_user_id($_POST['facebook_profile_field']);
 		}
 		
+		if ($_POST['selectedGalleries'] != $options['facebook_gallery_selections_field']) {
+			$admin->new_gallery(array_diff((array)$_POST['selectedGalleries'], (array)$options['facebook_gallery_selections_field']));
+			$admin->delete_gallery(array_diff((array)$options['facebook_gallery_selections_field'], (array)$_POST['selectedGalleries']));
+		}
+		
 		return array(
 			"facebook_id" => $id,
 			"facebook_name" => $_POST['facebook_profile_field'],
 			"facebook_wall_field" => $_POST['facebook_wall_field'],
-			"facebook_gallery_selections_field" => $_POST['facebook_gallery_selections_field']
+			"facebook_gallery_selections_field" => $_POST['selectedGalleries']
 		);
 	}
 	
@@ -221,21 +232,23 @@ class facebookImporterAdmin {
 					.checkboxSelector {width: 3%; float: left;}
 					.gallerySelectorItem {width: 96%; float: right;}
 					.gallerySelectorItem img {padding: 0 10px 10px 0;}
+					.gallerySelectorItem h4 small {font-weight: normal; font-size: 9px;}
 				</style>
 				<li class="gallerySelector">
 					<div class="checkboxSelector">
-						<input type="checkbox" name="selectedGalleries" value="'.$gallery['aid'].'">
+						<input type="checkbox" name="selectedGalleries[]" value="'.$gallery['aid'].'"'.
+							(in_array($gallery['aid'], (array)$options['facebook_gallery_selections_field']) ? ' checked="checked"' : '')
+						.'>
 					</div>
 					<div class="gallerySelectorItem">
 						<img style="float:left" src="'.$gallery['image'].'" />
-						<h4>'.$gallery['name'].'</h4>
+						<h4>'.$gallery['name'].' <small>('.$gallery['size']._n(" image", " images", $gallery['size']).')</small></h4>
 						<p>'.$gallery['description'].'</p>
 					</div>
 				</li>
 			';
 		}
 		echo '</ul>';
-		echo '<input type="text" name="facebook_gallery_selections_field" id="gallerySelectorBox" value="'.$options['facebook_gallery_selections_field'].'" />';
 	}
 	
 	/**
@@ -280,5 +293,74 @@ class facebookImporterAdmin {
 	function wall_profile_address_textbox() {
 		$options = get_option('facebook_gallery_options');
 		echo '<input type="text" name="facebook_profile_field" id="profileIDBox" value="'.$options['facebook_name'].'" />';
+	}
+	
+	function new_gallery($data) {
+		global $fql; 
+		if (!empty($data)) {
+			$source = "photo";
+			$args = array(
+				"columns" => array("pid", "aid", "link", "caption", "images"),
+				'comparisons' => array(),
+				'noTrue'
+			);
+			foreach((array)$data as $galleryID) {
+				array_push($args['comparisons'], array("aid", $galleryID, "equals", "or"));
+			}
+			$images = $fql->run_query($fql->generate_query($source, $args));
+			$new = array();
+			foreach ($images->data as $image) {
+				$data = array(
+					'term' => $image->aid,
+					"slug" => $image->pid,
+					"link" => $image->link,
+					"caption" => $image->caption,
+					"image" => $image->images[0]->source
+				);
+				$this->add_image($data);
+			}
+		}
+	}
+		
+	function delete_gallery($data) {
+		// foreach((array)$data as $galleryID) {
+		// 	
+		// }
+	}
+	
+	function add_image($data) {
+		$post = wp_insert_post(array(
+			'comment_status' => 'closed',
+			'ping_status' => 'closed',
+			//'tax_input' => $term['term_id'],
+			'post_name' => "fbImage".$data['slug'],
+			'post_status' => 'publish',
+			'post_title' => $data['caption'],
+			'post_type' => 'facebook_images',
+			'post_content' => $data['caption'],
+			'post_author' => 1
+		));
+		$this->download_image($data['image'], $post);
+	}
+	
+	function download_image($url, $post) {
+		$tmp = download_url($url);
+		
+		preg_match('/[^\?]+\.(jpg|JPG|jpe|JPE|jpeg|JPEG|gif|GIF|png|PNG)/', $url, $matches);
+		$file_array['name'] = basename($matches[0]);
+		$file_array['tmp_name'] = $tmp;
+		
+		if ( is_wp_error( $tmp ) ) {
+			@unlink($file_array['tmp_name']);
+			$file_array['tmp_name'] = '';
+		}
+		
+		$id = media_handle_sideload( $file_array, $post, $desc );
+		
+		
+		if ( is_wp_error($id) ) {
+			@unlink($file_array['tmp_name']);
+			return $id;
+		}
 	}
 }
