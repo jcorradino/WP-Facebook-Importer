@@ -34,6 +34,13 @@ $fb_app_redirect_url = ""; // doesn't actually redirect, just needs to be set in
 
 $fb_current_token = get_option("facebook_api_token");
 
+/*
+ * Set the following to true to allow an INI override for max execution time (up to 5 minutes) for the duration of facebook syncing,
+ * keeping it set to false will not break anything, but a sync will fail if facebook's api is running slow and you have a lot of images.
+ */
+
+define("ALLOW_EXECUTION_TIME_OVERWRITE", false);
+
 if ($fb_current_token == "" && $fb_app_id != "" && $fb_app_secret != "" && $fb_app_redirect_url != "") {
 	$ch = curl_init(); 
 	curl_setopt($ch, CURLOPT_URL, "https://graph.facebook.com/oauth/access_token?client_id=$fb_app_id&client_secret=$fb_app_secret&redirect_uri=$fb_app_redirect_url&grant_type=client_credentials");

@@ -51,7 +51,7 @@ class facebookImporterAdmin {
 	 */
 	function setup_pages() {
 		global $submenu;
-		unset($submenu['edit.php?post_type=facebook_images'][10]);
+		unset($submenu['edit.php?post_type=facebook_gallery'][10]);
 		add_submenu_page("edit.php?post_type=facebook_images", "Wall Content", "Wall Content", 'manage_options', "wall-content", array(__CLASS__, "setup_wall_page"));
 		add_options_page('Facebook Sync', 'Facebook Sync', 'manage_options', 'facebook_sync', array(__CLASS__, "plugin_options"));
 	}
@@ -65,6 +65,12 @@ class facebookImporterAdmin {
 	function plugin_init() {
 		global $fql;
 		
+		if ($this == "") {
+			$admin = new facebookImporterAdmin();
+		} else {
+			$admin = $this;
+		}
+		
 		$nonce = $_REQUEST['_nonce'];
 		if (wp_verify_nonce($nonce, 'resync-fb-galleries') && $_GET['resync'] == "true") {
 			set_transient( 'resync-fb-galleries', 'true', 60*20 );
@@ -74,6 +80,7 @@ class facebookImporterAdmin {
 			header("Content-Length: " . mb_strlen($response));
 			flush();
 			$fql->galleries("true");
+			$admin->syncGalleries();
 			ignore_user_abort(false);
 			echo $response;
 		} else if ($_GET['check'] == "resync-fb-galleries") {
@@ -81,15 +88,6 @@ class facebookImporterAdmin {
 				echo "done";
 				exit();
 			}
-		} else if ($_GET['resynctest'] == true) {
-			if ($this == "") {
-				$admin = new facebookImporterAdmin();
-			} else {
-				$admin = $this;
-			}
-			
-			$admin->syncGalleries();
-			exit();
 		}
 		
 		register_setting( 'facebook_gallery_options', 'facebook_gallery_options', array(__CLASS__, "validate_fields"));
@@ -125,6 +123,8 @@ class facebookImporterAdmin {
 			$admin->new_gallery(array_diff((array)$_POST['selectedGalleries'], (array)$options['facebook_gallery_selections_field']));
 			$admin->delete_gallery(array_diff((array)$options['facebook_gallery_selections_field'], (array)$_POST['selectedGalleries']));
 		}
+		
+		//$admin->syncGalleries();
 		
 		return array(
 			"facebook_id" => $id,
@@ -194,12 +194,12 @@ class facebookImporterAdmin {
 					<br>
 				</div>
 				<h2>Facebook Sync</h2>
-				<form action="options.php" method="post">
+				<form action="options.php" method="post" id="facebookGalleryForm">
 					<p>Use this page to configure sync data from facebook, set update timeframes, wall content filters, select galleries to use, and manually update all data.</p>
-					<p><input name="Submit" type="submit" value="<?php esc_attr_e('Save Changes'); ?>" /></p>
+					<p><input name="Submit" type="submit" class="facebookGallerySubmit" value="<?php esc_attr_e('Save Changes'); ?>" /></p>
 					<?php settings_fields('facebook_gallery_options'); ?>
 					<?php do_settings_sections('facebook_sync'); ?>
-					<p><input name="Submit" type="submit" value="<?php esc_attr_e('Save Changes'); ?>" /></p>
+					<p><input name="Submit" type="submit" class="facebookGallerySubmit" value="<?php esc_attr_e('Save Changes'); ?>" /></p>
 				</form>
 			</div>
 		<?php
@@ -231,7 +231,7 @@ class facebookImporterAdmin {
 		global $fql;
 		$options = get_option('facebook_gallery_options');
 		echo '<ul>';
-		foreach ($fql->galleries() as $gallery) {
+		foreach ((array)$fql->galleries() as $gallery) {
 			if ($gallery['image'] == "")
 				continue;
 				
@@ -422,62 +422,62 @@ class facebookImporterAdmin {
 			'noTrue'
 		);
 		$tax_lookup = array();
-		foreach ((array)$categories as $category) {
-			array_push($args['comparisons'], array("aid", $category->slug, "equals", "or"));
-			array_push($tax_lookup, $category->slug);
-		}
-		$images = $fql->run_query($fql->generate_query($source, $args));
-		foreach ($images->data as $image) {
-			$facebook[$image->aid][$image->pid] = array(
-				'term' => $image->aid,
-				"slug" => $image->pid,
-				"link" => $image->link,
-				"caption" => $image->caption,
-				"image" => $image->images[0]->source
-			);
-		}
-		foreach ($tax_lookup as $tax) {
-			$args = array(
-				'numberposts' => "-1",
-				"facebook_gallery_category" => $tax,
-				"post_type" => "facebook_gallery"
-			);
-			$post_data = get_posts( $args );
-			foreach ($post_data as $post) {
-				$wordpress[$tax][str_replace("fbimage", "", $post->post_name)] = $post;
+		if($categories != "") {
+			foreach ((array)$categories as $category) {
+				array_push($args['comparisons'], array("aid", $category->slug, "equals", "or"));
+				array_push($tax_lookup, $category->slug);
 			}
-		}
-		
-		
-		foreach ($facebook as $gallery) {
-			foreach ($gallery as $image) {
-				if($wordpress[$image["term"]][$image["slug"]] == "") {
-					$this->add_image($image);
-				} else {
-					if ($wordpress[$image["term"]][$image["slug"]]->post_content != $image['caption']) {
-						$post = array();
-						$post['ID'] = $wordpress[$image["term"]][$image["slug"]]->ID;
-						$post['post_content'] = $image['caption'];
-						$post['post_title'] = $image['caption'];
-						wp_update_post($post);
-						
-						echo "modified {$wordpress[$image["term"]][$image["slug"]]->ID} with {$image['caption']}";
+			$images = $fql->run_query($fql->generate_query($source, $args));
+			foreach ($images->data as $image) {
+				$facebook[$image->aid][$image->pid] = array(
+					'term' => $image->aid,
+					"slug" => $image->pid,
+					"link" => $image->link,
+					"caption" => $image->caption,
+					"image" => $image->images[0]->source
+				);
+			}
+			foreach ($tax_lookup as $tax) {
+				$args = array(
+					'numberposts' => "-1",
+					"facebook_gallery_category" => $tax,
+					"post_type" => "facebook_gallery"
+				);
+				$post_data = get_posts( $args );
+				foreach ($post_data as $post) {
+					$wordpress[$tax][str_replace("fbimage", "", $post->post_name)] = $post;
+				}
+			}
+
+
+			foreach ($facebook as $gallery) {
+				foreach ($gallery as $image) {
+					if($wordpress[$image["term"]][$image["slug"]] == "") {
+						$this->add_image($image);
+					} else {
+						if ($wordpress[$image["term"]][$image["slug"]]->post_content != $image['caption']) {
+							$post = array();
+							$post['ID'] = $wordpress[$image["term"]][$image["slug"]]->ID;
+							$post['post_content'] = $image['caption'];
+							$post['post_title'] = $image['caption'];
+							wp_update_post($post);
+						}
 					}
 				}
 			}
-		}
-		
-		foreach($wordpress as $aid => $post) {
-			foreach($post as $pid => $image) {
-				if($facebook[$aid][$pid] == "") {
-					$args = array( 'post_type' => 'attachment', 'numberposts' => -1, 'post_status' => null, 'post_parent' => $image->ID ); 
-					$attachments = get_posts($args);
-					if ($attachments) {
-						foreach ( $attachments as $attachment ) {
-							wp_delete_attachment($attachment->ID, true);
+
+			foreach($wordpress as $aid => $post) {
+				foreach($post as $pid => $image) {
+					if($facebook[$aid][$pid] == "") {
+						$args = array( 'post_type' => 'attachment', 'numberposts' => -1, 'post_status' => null, 'post_parent' => $image->ID ); 
+						$attachments = get_posts($args);
+						if ($attachments) {
+							foreach ( $attachments as $attachment ) {
+								wp_delete_attachment($attachment->ID, true);
+							}
 						}
+						wp_delete_post($image->ID, true);
 					}
-					wp_delete_post($image->ID, true);
 				}
 			}
 		}
