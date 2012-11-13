@@ -81,6 +81,15 @@ class facebookImporterAdmin {
 				echo "done";
 				exit();
 			}
+		} else if ($_GET['resynctest'] == true) {
+			if ($this == "") {
+				$admin = new facebookImporterAdmin();
+			} else {
+				$admin = $this;
+			}
+			
+			$admin->syncGalleries();
+			exit();
 		}
 		
 		register_setting( 'facebook_gallery_options', 'facebook_gallery_options', array(__CLASS__, "validate_fields"));
@@ -296,7 +305,11 @@ class facebookImporterAdmin {
 	}
 	
 	function new_gallery($data) {
-		global $fql; 
+		global $fql;
+		if (ALLOW_EXECUTION_TIME_OVERWRITE) {
+			$current_max = ini_get('max_execution_time');
+			ini_set('max_execution_time', 300);
+		}
 		if (!empty($data)) {
 			$source = "photo";
 			$args = array(
@@ -320,27 +333,61 @@ class facebookImporterAdmin {
 				$this->add_image($data);
 			}
 		}
+		if (ALLOW_EXECUTION_TIME_OVERWRITE) {
+			ini_set('max_execution_time', $current_max);
+		}
 	}
 		
 	function delete_gallery($data) {
-		// foreach((array)$data as $galleryID) {
-		// 	
-		// }
+		if (!empty($data)) {
+			foreach((array)$data as $galleryID) {
+				$args = array(
+					'numberposts' => "-1",
+					"facebook_gallery_category" => $galleryID,
+					"post_type" => "facebook_gallery"
+				);
+				$trash = get_posts( $args );
+				foreach ((array)$trash as $post) {
+					$args = array( 'post_type' => 'attachment', 'numberposts' => -1, 'post_status' => null, 'post_parent' => $post->ID ); 
+					$attachments = get_posts($args);
+					if ($attachments) {
+						foreach ( $attachments as $attachment ) {
+							wp_delete_attachment($attachment->ID, true);
+						}
+					}
+					wp_delete_post($post->ID, true);
+				}
+				$term = get_term_by("slug", $galleryID, "facebook_gallery", ARRAY_A);
+				wp_delete_term( $term["term_id"], "facebook_gallery");
+			}
+		}
 	}
 	
 	function add_image($data) {
-		$post = wp_insert_post(array(
+		global $fql;
+		$galleries = $fql->galleries();
+		foreach($galleries as $gallery) {
+			if ($data['term'] == $gallery["aid"]) {
+				$this_gallery = $gallery;
+			}
+		}
+		if (!($term = get_term_by("name", $this_gallery['name'], "facebook_gallery", ARRAY_A))) {
+			$term = wp_insert_term($this_gallery['name'], "facebook_gallery", array("description" => $this_gallery['description'], "slug" => $this_gallery['aid']));
+		}
+		$postID = wp_insert_post(array(
 			'comment_status' => 'closed',
 			'ping_status' => 'closed',
-			//'tax_input' => $term['term_id'],
 			'post_name' => "fbImage".$data['slug'],
 			'post_status' => 'publish',
 			'post_title' => $data['caption'],
-			'post_type' => 'facebook_images',
+			'post_type' => 'facebook_gallery',
 			'post_content' => $data['caption'],
 			'post_author' => 1
 		));
-		$this->download_image($data['image'], $post);
+		$term_reference = ($term["slug"] != "") ? $term["slug"] : $term["term_id"];
+		wp_set_object_terms($postID, $term_reference, "facebook_gallery");
+		update_post_meta($postID, "pid", $data['slug']);
+		$this->download_image($data['image'], $postID);
 	}
 	
 	function download_image($url, $post) {
@@ -361,6 +408,78 @@ class facebookImporterAdmin {
 		if ( is_wp_error($id) ) {
 			@unlink($file_array['tmp_name']);
 			return $id;
+		}
+	}
+	
+	function syncGalleries() {
+		global $fql;
+		
+		$categories = get_terms( 'facebook_gallery', 'hide_empty=0' );
+		$source = "photo";
+		$args = array(
+			"columns" => array("pid", "aid", "link", "caption", "images"),
+			'comparisons' => array(),
+			'noTrue'
+		);
+		$tax_lookup = array();
+		foreach ((array)$categories as $category) {
+			array_push($args['comparisons'], array("aid", $category->slug, "equals", "or"));
+			array_push($tax_lookup, $category->slug);
+		}
+		$images = $fql->run_query($fql->generate_query($source, $args));
+		foreach ($images->data as $image) {
+			$facebook[$image->aid][$image->pid] = array(
+				'term' => $image->aid,
+				"slug" => $image->pid,
+				"link" => $image->link,
+				"caption" => $image->caption,
+				"image" => $image->images[0]->source
+			);
+		}
+		foreach ($tax_lookup as $tax) {
+			$args = array(
+				'numberposts' => "-1",
+				"facebook_gallery_category" => $tax,
+				"post_type" => "facebook_gallery"
+			);
+			$post_data = get_posts( $args );
+			foreach ($post_data as $post) {
+				$wordpress[$tax][str_replace("fbimage", "", $post->post_name)] = $post;
+			}
+		}
+		
+		
+		foreach ($facebook as $gallery) {
+			foreach ($gallery as $image) {
+				if($wordpress[$image["term"]][$image["slug"]] == "") {
+					$this->add_image($image);
+				} else {
+					if ($wordpress[$image["term"]][$image["slug"]]->post_content != $image['caption']) {
+						$post = array();
+						$post['ID'] = $wordpress[$image["term"]][$image["slug"]]->ID;
+						$post['post_content'] = $image['caption'];
+						$post['post_title'] = $image['caption'];
+						wp_update_post($post);
+						
+						echo "modified {$wordpress[$image["term"]][$image["slug"]]->ID} with {$image['caption']}";
+					}
+				}
+			}
+		}
+		
+		foreach($wordpress as $aid => $post) {
+			foreach($post as $pid => $image) {
+				if($facebook[$aid][$pid] == "") {
+					$args = array( 'post_type' => 'attachment', 'numberposts' => -1, 'post_status' => null, 'post_parent' => $image->ID ); 
+					$attachments = get_posts($args);
+					if ($attachments) {
+						foreach ( $attachments as $attachment ) {
+							wp_delete_attachment($attachment->ID, true);
+						}
+					}
+					wp_delete_post($image->ID, true);
+				}
+			}
 		}
 	}
 }

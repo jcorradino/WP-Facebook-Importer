@@ -45,7 +45,7 @@ class facebookImporterMain {
 	function createType() {
 		register_taxonomy(
 			"facebook_gallery",
-			array("facebook_images"),
+			array("facebook_gallery"),
 			array(
 				'hierarchical' => false,
 				'show_ui' => true,
@@ -56,13 +56,13 @@ class facebookImporterMain {
 					'singular_name' => __( 'Gallery' )
 				),
 				'rewrite' => array( 
-					'slug' => 'facebook-gallery', 
+					'slug' => 'facebook_gallery', 
 					'with_front' => true
 				)
 			)
 		);
 		
-		register_post_type( 'facebook_images',
+		register_post_type( 'facebook_gallery',
 			array(
 				'labels' => array(
 					'name' => __( 'Facebook Sync' ),

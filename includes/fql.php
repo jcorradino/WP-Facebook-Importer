@@ -89,7 +89,7 @@ class fql {
 			$where = substr($where, 3);
 		}
 		
-		return "SELECT {$args['columns']} FROM $source WHERE $where";
+		return "SELECT {$args['columns']} FROM $source WHERE $where limit 500";
 	}
 	
 	/**
