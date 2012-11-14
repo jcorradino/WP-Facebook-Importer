@@ -179,6 +179,8 @@ class facebookImporterAdmin {
 	 */
 	function enqueue_admin_scripts() {
 		wp_enqueue_script( 'wp_facebook_importer_admin', WP_PLUGIN_URL.'/WP-Facebook-Importer/importer.jquery.js' );
+		wp_register_style( 'plugin-style', WP_PLUGIN_URL."/WP-Facebook-Importer/importer.css");
+        wp_enqueue_style( 'plugin-style' );
 	}
 	
 	/**
@@ -236,13 +238,6 @@ class facebookImporterAdmin {
 				continue;
 				
 			echo '
-				<style>
-					.gallerySelector {width:100%; float: left; border-bottom: 1px solid #cccccc; margin: 15px 0;}
-					.checkboxSelector {width: 3%; float: left;}
-					.gallerySelectorItem {width: 96%; float: right;}
-					.gallerySelectorItem img {padding: 0 10px 10px 0;}
-					.gallerySelectorItem h4 small {font-weight: normal; font-size: 9px;}
-				</style>
 				<li class="gallerySelector">
 					<div class="checkboxSelector">
 						<input type="checkbox" name="selectedGalleries[]" value="'.$gallery['aid'].'"'.
@@ -250,7 +245,7 @@ class facebookImporterAdmin {
 						.'>
 					</div>
 					<div class="gallerySelectorItem">
-						<img style="float:left" src="'.$gallery['image'].'" />
+						<img class="left" src="'.$gallery['image'].'" />
 						<h4>'.$gallery['name'].' <small>('.$gallery['size']._n(" image", " images", $gallery['size']).')</small></h4>
 						<p>'.$gallery['description'].'</p>
 					</div>
@@ -304,6 +299,14 @@ class facebookImporterAdmin {
 		echo '<input type="text" name="facebook_profile_field" id="profileIDBox" value="'.$options['facebook_name'].'" />';
 	}
 	
+	/**
+	 * Adds a new gallery
+	 *
+	 * @param $data [string|array] - gallery id(s) to be imported
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function new_gallery($data) {
 		global $fql;
 		if (ALLOW_EXECUTION_TIME_OVERWRITE) {
@@ -337,7 +340,15 @@ class facebookImporterAdmin {
 			ini_set('max_execution_time', $current_max);
 		}
 	}
-		
+	
+	/**
+	 * Deletes a gallery
+	 *
+	 * @param $data [string|array] - gallery id(s) to be deleted
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function delete_gallery($data) {
 		if (!empty($data)) {
 			foreach((array)$data as $galleryID) {
@@ -363,6 +374,14 @@ class facebookImporterAdmin {
 		}
 	}
 	
+	/**
+	 * Adds an image
+	 *
+	 * @param $data [array] - array of image data to add, including slug, aid, pid, caption, and image
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function add_image($data) {
 		global $fql;
 		$galleries = $fql->galleries();
@@ -390,6 +409,17 @@ class facebookImporterAdmin {
 		$this->download_image($data['image'], $postID);
 	}
 	
+	/**
+	 * Fetch image from facebook, attach to post
+	 *
+	 * @param $url [string] - url of the image to fetch
+	 * @param $post [string] - post id to attach to
+	 *
+	 * @return [string] - error (otherwise, no return)
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function download_image($url, $post) {
 		$tmp = download_url($url);
 		
@@ -411,6 +441,91 @@ class facebookImporterAdmin {
 		}
 	}
 	
+	
+	/**
+	 * Sync data with facebook
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
+	function syncGalleries() {
+		global $fql;
+		
+		$categories = get_terms( 'facebook_gallery', 'hide_empty=0' );
+		$source = "photo";
+		$args = array(
+			"columns" => array("pid", "aid", "link", "caption", "images"),
+			'comparisons' => array(),
+			'noTrue'
+		);
+		$tax_lookup = array();
+		if($categories != "") {
+			foreach ((array)$categories as $category) {
+				array_push($args['comparisons'], array("aid", $category->slug, "equals", "or"));
+				array_push($tax_lookup, $category->slug);
+			}
+			$images = $fql->run_query($fql->generate_query($source, $args));
+			foreach ($images->data as $image) {
+				$facebook[$image->aid][$image->pid] = array(
+					'term' => $image->aid,
+					"slug" => $image->pid,
+					"link" => $image->link,
+					"caption" => $image->caption,
+					"image" => $image->images[0]->source
+				);
+			}
+			foreach ($tax_lookup as $tax) {
+				$args = array(
+					'numberposts' => "-1",
+					"facebook_gallery_category" => $tax,
+					"post_type" => "facebook_gallery"
+				);
+				$post_data = get_posts( $args );
+				foreach ($post_data as $post) {
+					$wordpress[$tax][str_replace("fbimage", "", $post->post_name)] = $post;
+				}
+			}
+
+
+			foreach ($facebook as $gallery) {
+				foreach ($gallery as $image) {
+					if($wordpress[$image["term"]][$image["slug"]] == "") {
+						$this->add_image($image);
+					} else {
+						if ($wordpress[$image["term"]][$image["slug"]]->post_content != $image['caption']) {
+							$post = array();
+							$post['ID'] = $wordpress[$image["term"]][$image["slug"]]->ID;
+							$post['post_content'] = $image['caption'];
+							$post['post_title'] = $image['caption'];
+							wp_update_post($post);
+						}
+					}
+				}
+			}
+
+			foreach($wordpress as $aid => $post) {
+				foreach($post as $pid => $image) {
+					if($facebook[$aid][$pid] == "") {
+						$args = array( 'post_type' => 'attachment', 'numberposts' => -1, 'post_status' => null, 'post_parent' => $image->ID ); 
+						$attachments = get_posts($args);
+						if ($attachments) {
+							foreach ( $attachments as $attachment ) {
+								wp_delete_attachment($attachment->ID, true);
+							}
+						}
+						wp_delete_post($image->ID, true);
+					}
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Sync data with facebook
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
 	function syncGalleries() {
 		global $fql;
 		
