@@ -50,7 +50,8 @@ class fql {
 	 *		'columns' => array(
 	 *			"message",
 	 *			"post_id"
-	 *		)
+	 *		),
+	 *		'limit' => 250
 	 *	);
 	 *
 	 * @param $source [string] - table being used
@@ -87,9 +88,23 @@ class fql {
 		
 		if (substr($where, 0, 3) == "OR ") {
 			$where = substr($where, 3);
+		} else if (substr($where, 0, 4) == "AND ") {
+			$where = substr($where, 4);
 		}
 		
-		return "SELECT {$args['columns']} FROM $source WHERE $where limit 500";
+		$length = strlen($where);
+		
+		if (substr($where, $length-3, 3) == "OR ") {
+			$where = substr($where, 0, $length-3);
+		} else if (substr($where, $length-4, 4) == "AND ") {
+			$where = substr($where, 0, $length-4);
+		}
+		
+		$where = str_replace("OR AND", "OR", $where);
+		
+		$limit = ($args["limit"] != "") ? $args["limit"] : "200";
+		
+		return "SELECT {$args['columns']} FROM $source WHERE $where limit $limit";
 	}
 	
 	/**
@@ -105,12 +120,12 @@ class fql {
 	function process_args($source, $args) { // group query
 		
 		foreach($args["comparisons"] as $comparison) {
-			if (strtolower($comparison[0]) == "or" && $source == "page") {
+			if (is_string($comparison[0]) && strtolower($comparison[0]) == "or" && $source == "page") {
 				$orQuery .= "OR source_id = {$this->id} ";
 			}
 			for($i = 0; $i < sizeof($comparison); $i++) {
 				if (is_array($comparison[$i])) {
-					if (strtolower($comparison[0]) == "or") {
+					if (is_string($comparison[0]) && strtolower($comparison[0]) == "or") {
 						$orQuery .= "AND " . $this->process_subargs($comparison[$i]);
 					} else {
 						$andQuery .= "AND " . $this->process_subargs($comparison[$i]);
@@ -122,9 +137,9 @@ class fql {
 			} else {
 				$preOr = "OR ";
 			}
-			if (strtolower($comparison[3]) == "or") {
+			if (is_string($comparison[3]) && strtolower($comparison[3]) == "or" || is_string($comparison[0]) && strtolower($comparison[0]) == "or") {
 				$orQuery .= $preOr . $this->process_subargs($comparison);
-			} else if (strtolower($comparison[3]) == "and") {
+			} else if (is_string($comparison[3]) && strtolower($comparison[3]) == "and") {
 				$andQuery .= "AND " . $this->process_subargs($comparison);
 			}
 		}
@@ -145,7 +160,7 @@ class fql {
 		if ($args[2] == "equals") {
 			return "{$args[0]} = '{$args[1]}' ";
 		} else if ($args[2] == "like") {
-			return "strpos({$args[0]}, '{$args[1]}') ";
+			return "strpos({$args[0]}, '{$args[1]}') >= 0 ";
 		}
 	}
 	
@@ -213,6 +228,65 @@ class fql {
 			delete_transient("resync-fb-galleries");
 			return $galleries;
 		}
+	}
+	
+	/**
+	 * Sync up wall data
+	 *
+	 * @author Jason Corradino
+	 *
+	 */
+	function sync_wall($filter = "") {
+		$options = get_option('facebook_gallery_options');
+		
+		$options['facebook_wall_field'] = ($filter != "") ? $filter : $options['facebook_wall_field'];
+		
+		$source = "stream";
+		
+		$args = array(
+			"columns" => array("post_id", "message", "action_links", "attachment", "impressions", "comments", "likes", "permalink", "tagged_ids", "description", "type"),
+			'limit' => 50,
+			'noTrue'
+		);
+		
+		if ($options["facebook_wall_field"] != "") {
+			$args['comparisons'] = array(
+				array(
+					"or",
+					array("source_id", $options["facebook_id"], "equals"),
+					array("message", ucfirst($options['facebook_wall_field']), "like")
+				),
+				array(
+					"or",
+					array("source_id", $options["facebook_id"], "equals"),
+					array("message", strtolower($options['facebook_wall_field']), "like")
+				)
+			);
+		} else {
+			$args['comparisons'] = array(
+				array(array("source_id", $options["facebook_id"], "equals"), "and")
+			);
+		}
+		
+		$query = $this->generate_query($source, $args);
+		$feed = $this->run_query($query);
+		
+		$return = array();
+		
+		foreach ($feed->data as $item) {
+			$save = array(
+				"id" => $item->post_id,
+				"message" => $item->message,
+				"image" => $item->attachment->media[0]->src,
+				"likes" => $item->likes->count,
+				"permalink" => $item->permalink
+			);
+			
+			if($save["permalink"] != "") {
+				array_push($return, $save);
+			}
+		}
+		update_option( "facebook_wall_data", $return );
 	}
 	
 	/**

@@ -36,7 +36,11 @@ class facebookImporterAdmin {
 		global $fql;
 		$fql = new fql();
 		
-		//add_action('admin_enqueue_scripts', array(__CLASS__, "enqueueScript"));
+		if ($this == "") {
+			$admin = new facebookImporterAdmin();
+		} else {
+			$admin = $this;
+		}
 		add_action('admin_head', array(__CLASS__, "admin_header"));
 		add_action('admin_enqueue_scripts', array(__CLASS__, "enqueue_admin_scripts"));
 		add_action('admin_menu', array(__CLASS__, "setup_pages"));
@@ -52,7 +56,7 @@ class facebookImporterAdmin {
 	function setup_pages() {
 		global $submenu;
 		unset($submenu['edit.php?post_type=facebook_gallery'][10]);
-		add_submenu_page("edit.php?post_type=facebook_images", "Wall Content", "Wall Content", 'manage_options', "wall-content", array(__CLASS__, "setup_wall_page"));
+		add_submenu_page("edit.php?post_type=facebook_gallery", "Wall Content", "Wall Content", 'manage_options', "wall-content", array(__CLASS__, "setup_wall_page"));
 		add_options_page('Facebook Sync', 'Facebook Sync', 'manage_options', 'facebook_sync', array(__CLASS__, "plugin_options"));
 	}
 	
@@ -83,7 +87,9 @@ class facebookImporterAdmin {
 			$admin->syncGalleries();
 			ignore_user_abort(false);
 			echo $response;
-		} else if ($_GET['check'] == "resync-fb-galleries") {
+		} else if (wp_verify_nonce($nonce, 'resync-wall-data') && $_GET['resync-wall'] == "true") {
+			$fql->sync_wall();
+		}else if ($_GET['check'] == "resync-fb-galleries") {
 			if (get_transient("resync-fb-galleries") != "true") {
 				echo "done";
 				exit();
@@ -124,7 +130,9 @@ class facebookImporterAdmin {
 			$admin->delete_gallery(array_diff((array)$options['facebook_gallery_selections_field'], (array)$_POST['selectedGalleries']));
 		}
 		
-		//$admin->syncGalleries();
+		if ($POST['facebook_wall_field'] != $options['facebook_wall_field']) {
+			$fql->sync_wall($POST['facebook_wall_field']);
+		}
 		
 		return array(
 			"facebook_id" => $id,
@@ -141,7 +149,8 @@ class facebookImporterAdmin {
 	 *
 	 */
 	function setup_wall_page() {
-		$nonce= wp_create_nonce('resync-wall');
+		$nonce= wp_create_nonce('resync-wall-data');
+		$data = get_option('facebook_wall_data');
 		echo '
 			<div class="wrap">
 				<div id="icon-edit" class="icon32 icon32-posts-facebook_images">
@@ -151,7 +160,25 @@ class facebookImporterAdmin {
 				<h2>Facebook Wall Content</h2>
 			
 				<p>Below is the content that has been synced from Facebook based on your preferences.</p>
-				<p><a href="/wp-admin/edit.php?post_type=facebook_images&page=wall-content&resync=true&_nonce='.$nonce.'" class="button" target="_blank">Click to resync</a></p>
+				<p><a href="/wp-admin/edit.php?post_type=facebook_gallery&page=wall-content&resync-wall=true&_nonce='.$nonce.'" class="button">Click to resync</a></p>
+				
+				<ul class="sampleWall">
+		';
+		
+		foreach ($data as $item) {
+			echo '
+				<li class="sampleWallData">
+					<div class="sampleWallItem">
+						<img class="left" src="'.$item['image'].'" />
+						<p>'.$item['message'].'<p>
+						<p>'.$item['likes'].' like(s) | <a href="'.$item['permalink'].'">Facebook Permalink</a></p>
+					</div>
+				</li>
+			';
+		}
+		
+		echo '
+		</ul>
 			</div>
 		';
 	}
@@ -438,85 +465,6 @@ class facebookImporterAdmin {
 		if ( is_wp_error($id) ) {
 			@unlink($file_array['tmp_name']);
 			return $id;
-		}
-	}
-	
-	
-	/**
-	 * Sync data with facebook
-	 *
-	 * @author Jason Corradino
-	 *
-	 */
-	function syncGalleries() {
-		global $fql;
-		
-		$categories = get_terms( 'facebook_gallery', 'hide_empty=0' );
-		$source = "photo";
-		$args = array(
-			"columns" => array("pid", "aid", "link", "caption", "images"),
-			'comparisons' => array(),
-			'noTrue'
-		);
-		$tax_lookup = array();
-		if($categories != "") {
-			foreach ((array)$categories as $category) {
-				array_push($args['comparisons'], array("aid", $category->slug, "equals", "or"));
-				array_push($tax_lookup, $category->slug);
-			}
-			$images = $fql->run_query($fql->generate_query($source, $args));
-			foreach ($images->data as $image) {
-				$facebook[$image->aid][$image->pid] = array(
-					'term' => $image->aid,
-					"slug" => $image->pid,
-					"link" => $image->link,
-					"caption" => $image->caption,
-					"image" => $image->images[0]->source
-				);
-			}
-			foreach ($tax_lookup as $tax) {
-				$args = array(
-					'numberposts' => "-1",
-					"facebook_gallery_category" => $tax,
-					"post_type" => "facebook_gallery"
-				);
-				$post_data = get_posts( $args );
-				foreach ($post_data as $post) {
-					$wordpress[$tax][str_replace("fbimage", "", $post->post_name)] = $post;
-				}
-			}
-
-
-			foreach ($facebook as $gallery) {
-				foreach ($gallery as $image) {
-					if($wordpress[$image["term"]][$image["slug"]] == "") {
-						$this->add_image($image);
-					} else {
-						if ($wordpress[$image["term"]][$image["slug"]]->post_content != $image['caption']) {
-							$post = array();
-							$post['ID'] = $wordpress[$image["term"]][$image["slug"]]->ID;
-							$post['post_content'] = $image['caption'];
-							$post['post_title'] = $image['caption'];
-							wp_update_post($post);
-						}
-					}
-				}
-			}
-
-			foreach($wordpress as $aid => $post) {
-				foreach($post as $pid => $image) {
-					if($facebook[$aid][$pid] == "") {
-						$args = array( 'post_type' => 'attachment', 'numberposts' => -1, 'post_status' => null, 'post_parent' => $image->ID ); 
-						$attachments = get_posts($args);
-						if ($attachments) {
-							foreach ( $attachments as $attachment ) {
-								wp_delete_attachment($attachment->ID, true);
-							}
-						}
-						wp_delete_post($image->ID, true);
-					}
-				}
-			}
 		}
 	}
 	

@@ -1,6 +1,6 @@
-.gallerySelector {width:100%; float: left; border-bottom: 1px solid #cccccc; margin: 15px 0;}
+.gallerySelector, .sampleWallItem {width:100%; float: left; border-bottom: 1px solid #cccccc; margin: 15px 0;}
 .checkboxSelector {width: 3%; float: left;}
-.gallerySelectorItem {width: 96%; float: right;}
-.gallerySelectorItem img {padding: 0 10px 10px 0;}
+.gallerySelectorItem, .sampleWallItem {width: 96%; float: right;}
+.gallerySelectorItem img, .sampleWallItem img {padding: 0 10px 10px 0;}
 .gallerySelectorItem h4 small {font-weight: normal; font-size: 9px;}
-.gallerySelectorItem .left {float: left;}
+.gallerySelectorItem .left, .sampleWallItem .left {float: left;}
