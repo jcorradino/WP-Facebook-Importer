@@ -88,4 +88,30 @@ class facebookImporterMain {
 			)
 		);
 	}
+	
+	function display_wall_data() {
+		$wall = get_option("facebook_wall_data");
+		
+		$return = '<ul class="facebookWall">';
+		foreach ($data as $item) {
+			$return .= '
+				<li class="wallData">
+					<div class="wallItem">
+						<img class="left" src="'.$item['image'].'" />
+						<p>'.$item['message'].'<p>
+						<p>'.$item['likes'].' like(s) | <a href="'.$item['permalink'].'">Facebook Permalink</a></p>
+					</div>
+				</li>
+			';
+		}
+		$return .= '</ul>';
+		
+		do_action("display_wall_data", $wall);
+		
+		return $return;
+	}
+}
+
+function display_wall() {
+	return facebookImporterMain::display_wall_data();
 }
