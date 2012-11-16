@@ -93,7 +93,7 @@ class facebookImporterMain {
 		$wall = get_option("facebook_wall_data");
 		
 		$return = '<ul class="facebookWall">';
-		foreach ($data as $item) {
+		foreach ($wall as $item) {
 			$return .= '
 				<li class="wallData">
 					<div class="wallItem">
@@ -113,5 +113,5 @@ class facebookImporterMain {
 }
 
 function display_wall() {
-	return facebookImporterMain::display_wall_data();
+	echo facebookImporterMain::display_wall_data();
 }
