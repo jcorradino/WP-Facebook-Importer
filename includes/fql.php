@@ -64,7 +64,6 @@ class fql {
 	 */
 	function generate_query($source = "", $args = "") {
 		$this->id = get_option("facebook_user_id");
-		$this->id = 103817796377295;
 		
 		if (!$args['columns']) {
 			$args['columns'] = "post_id, message, action_links, attachment, impressions, comments, likes, permalink, tagged_ids, description, type";
